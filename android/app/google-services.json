@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "157508993463",
+    "project_id": "wooapp-9a877",
+    "storage_bucket": "wooapp-9a877.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:157508993463:android:10aa66cd8c49d6e53f6832",
+        "android_client_info": {
+          "package_name": "com.example.woopos_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBHPq4WgIWiz781GkGfCet5SaOpDFggY0Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
