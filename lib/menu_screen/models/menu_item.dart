@@ -39,7 +39,7 @@ class MenuItem {
       addon: json['addon'],
       sizes: json['sizes'] as List<dynamic>?,
       discountRules: json['discount_rules'] as Map<String, dynamic>?,
-      imageUrl: json['image_url'],
+      imageUrl: json['name_image'],
     );
   }
   Map<String, dynamic> toJson() => {

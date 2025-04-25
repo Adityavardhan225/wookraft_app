@@ -31,7 +31,27 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+// class Config {
+//   static const String baseUrl = 'http://192.168.9.116:8000';
+//   static const String wsUrl = 'ws://192.168.9.116:8000/ws';
+// }
+
+
+
 class Config {
-  static const String baseUrl = 'http://192.168.9.116:8000';
-  static const String wsUrl = 'ws://192.168.9.116:8000/ws';
+  static const String baseUrl = 'https://wookraft-backend-1.onrender.com';
+  static const String wsUrl = 'wss://wookraft-backend-1.onrender.com/ws';
+ 
 }

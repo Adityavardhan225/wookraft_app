@@ -1,56 +1,3 @@
-// import 'dart:convert';
-// import 'package:http/http.dart' as http;
-// import 'package:shared_preferences/shared_preferences.dart';
-// import 'config.dart';
-
-// class HttpClient {
-//   // static const String _baseUrl = 'http://127.0.0.1:8000';
-//   static const String _baseUrl = Config.baseUrl;
-
-//   static Future<http.Response> get(String endpoint, {Map<String, String>? queryParams}) async {
-//     final token = await getToken();
-//     final headers = _createHeaders(token);
-//     final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
-//     return http.get(url, headers: headers);
-//   }
-
-//   static Future<http.Response> post(String endpoint, {Map<String, String>? queryParams, Map<String, dynamic>? body}) async {
-//     final token = await getToken();
-//     final headers = _createHeaders(token);
-//     final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
-//     return http.post(url, headers: headers, body: body != null ? jsonEncode(body) : null);
-//   }
-
-//   static Future<String?> getToken() async {
-//     final prefs = await SharedPreferences.getInstance();
-//     return prefs.getString('access_token');
-//   }
-
-//   static Map<String, String> _createHeaders(String? token) {
-//     final headers = {'Content-Type': 'application/json'};
-//     if (token != null) {
-//       headers['Authorization'] = 'Bearer $token';
-//     }
-//     return headers;
-//   }
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -60,26 +7,55 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
 
 class HttpClient {
-  static const String _baseUrl = Config.baseUrl;
+  static String _baseUrl = Config.baseUrl;
 
   static Future<http.Response> get(String endpoint, {Map<String, String>? queryParams}) async {
     final token = await getToken();
     final headers = _createHeaders(token);
-    final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
-    return http.get(url, headers: headers);
+  //   final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
+  //   return http.get(url, headers: headers);
+  // }
+    Uri url;
+  if (_baseUrl.startsWith('https://')) {
+    url = Uri.https(_baseUrl.replaceFirst('https://', ''), endpoint, queryParams);
+  } else {
+    url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
   }
+  
+  return http.get(url, headers: headers);
+}
 
   static Future<http.Response> post(String endpoint, {Map<String, String>? queryParams, Map<String, dynamic>? body}) async {
     final token = await getToken();
     final headers = _createHeaders(token);
-    final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
-    return http.post(url, headers: headers, body: body != null ? jsonEncode(body) : null);
+  //   final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
+  //   return http.post(url, headers: headers, body: body != null ? jsonEncode(body) : null);
+  // }
+    // With this code:
+  Uri url;
+  if (_baseUrl.startsWith('https://')) {
+    url = Uri.https(_baseUrl.replaceFirst('https://', ''), endpoint, queryParams);
+  } else {
+    url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
   }
+  
+  return http.post(url, headers: headers, body: body != null ? jsonEncode(body) : null);
+}
 
   static Future<http.Response> put(String endpoint, {Map<String, String>? queryParams, Map<String, dynamic>? body}) async {
   final token = await getToken();
   final headers = _createHeaders(token);
-  final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
+//   final url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
+//   return http.put(url, headers: headers, body: body != null ? jsonEncode(body) : null);
+// }
+  // With this code:
+  Uri url;
+  if (_baseUrl.startsWith('https://')) {
+    url = Uri.https(_baseUrl.replaceFirst('https://', ''), endpoint, queryParams);
+  } else {
+    url = Uri.http(_baseUrl.replaceFirst('http://', ''), endpoint, queryParams);
+  }
+  
   return http.put(url, headers: headers, body: body != null ? jsonEncode(body) : null);
 }
 

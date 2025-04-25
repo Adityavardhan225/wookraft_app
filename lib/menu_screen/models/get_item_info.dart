@@ -51,7 +51,7 @@ class GetItemInfo {
       originalPrice: originalPrice,
       discountedPrice: discountedPrice,
       description: json['description'] ?? '',
-      imageUrl: json['image_url'],
+      imageUrl: json['name_image'],
       currentQuantity: currentQty,
     );
   }

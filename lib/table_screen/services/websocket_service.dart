@@ -49,7 +49,7 @@ Future<void> connect() async {
     } else if (wsUrl.startsWith('https://')) {
       wsUrl = wsUrl.replaceFirst('https://', 'wss://');
     } else if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
-      wsUrl = 'ws://$wsUrl';
+      wsUrl = 'wss://$wsUrl';
     }
     
     // Format URL properly and avoid Uri.toString() conversion issues
