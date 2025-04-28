@@ -683,26 +683,45 @@ class ItemCard extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Veg/Non-veg indicator
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 3, right: 6),
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: foodType.toLowerCase().contains('veg') 
-                                          ? Colors.green 
-                                          : Colors.red, 
-                                        width: 1
-                                      ),
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                    child: Icon(
-                                      Icons.circle,
-                                      size: 8,
-                                      color: foodType.toLowerCase().contains('veg') 
-                                        ? Colors.green 
-                                        : Colors.red,
-                                    ),
-                                  ),
+                                  // Container(
+                                  //   margin: const EdgeInsets.only(top: 3, right: 6),
+                                  //   padding: const EdgeInsets.all(2),
+                                  //   decoration: BoxDecoration(
+                                  //     border: Border.all(
+                                  //       color: foodType.toLowerCase().contains('veg') 
+                                  //         ? Colors.green 
+                                  //         : Colors.red, 
+                                  //       width: 1
+                                  //     ),
+                                  //     borderRadius: BorderRadius.circular(2),
+                                  //   ),
+                                  //   child: Icon(
+                                  //     Icons.circle,
+                                  //     size: 8,
+                                  //     color: foodType.toLowerCase().contains('veg') 
+                                  //       ? Colors.green 
+                                  //       : Colors.red,
+                                  //   ),
+                                  // ),
+
+                                      // Replace the circle indicator with a simple food type badge
+    Container(
+      margin: const EdgeInsets.only(top: 3, right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Text(
+        foodType,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey[800],
+        ),
+      ),
+    ),
                                   
                                   // Item name
                                   Expanded(

@@ -42,6 +42,7 @@ class TableService {
   Future<List<TableModel>> getTablesByFloor(String floorId) async {
     try {
       final response = await HttpClient.get('tables_management/tables/floor/$floorId');
+      print('floor id is ,$floorId');
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final List<dynamic> tablesJson = json.decode(response.body);
         return tablesJson.map((json) => TableModel.fromJson(json)).toList();

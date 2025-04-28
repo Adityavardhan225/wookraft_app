@@ -1,39 +1,35 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/table_model.dart';
-import '../services/table_service.dart';
-// import '../services/api_service.dart';
+import '../../table_screen/models/table_model.dart';
 import '../../http_client.dart';
 
-class TableSelectionScreen extends StatefulWidget {
-  final DateTime selectedDate;
+class TableSelectionReservationScreen extends StatefulWidget {
+  final DateTime reservationDateTime;
   final int partySize;
+  final int durationMinutes;
   final List<String> initialSelectedTableIds;
-  final bool selectionMode;
-  final String heroTagPrefix;
 
-  const TableSelectionScreen({
+  const TableSelectionReservationScreen({
     super.key,
-    required this.selectedDate,
+    required this.reservationDateTime,
     required this.partySize,
+    this.durationMinutes = 90,
     this.initialSelectedTableIds = const [],
-    this.selectionMode = true,
-    this.heroTagPrefix = 'default',
-    
   });
 
   @override
-  _TableSelectionScreenState createState() => _TableSelectionScreenState();
+  _TableSelectionReservationScreenState createState() => _TableSelectionReservationScreenState();
 }
 
-class _TableSelectionScreenState extends State<TableSelectionScreen> with SingleTickerProviderStateMixin {
-  late TableService _tableService;
+class _TableSelectionReservationScreenState extends State<TableSelectionReservationScreen> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   
   List<dynamic> _floorPlans = [];
   int _selectedFloorIndex = 0;
   List<TableModel> _selectedTables = [];
+  List<TableModel> _availableTables = [];
+  Map<String, List<TableModel>> _tablesByFloor = {};
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -44,8 +40,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> with Single
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    // _tableService = TableService(_websocketService);
-    _loadFloorPlans();
+    _loadAvailableTables();
   }
 
   @override
@@ -54,85 +49,105 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> with Single
     super.dispose();
   }
 
-Future<void> _loadFloorPlans() async {
+Future<void> _loadAvailableTables() async {
   try {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
     
-    // Load floors
-    final response = await HttpClient.get('tables_management/floors');
+    // Format date to ISO string for API
+    final String isoDateTime = widget.reservationDateTime.toUtc().toIso8601String();
+    
+    // Use the getWithQueryParams method instead of building URL manually
+    final response = await HttpClient.getWithQueryParams(
+      'tables_management/tables_management/reserved_table/available',  
+      {  
+        'reservation_time': isoDateTime,
+        'party_size': widget.partySize.toString(),
+        'duration_minutes': widget.durationMinutes.toString(),
+      },
+    );
+    
+    print('API response status: ${response.statusCode}');
+    
     if (response.statusCode != 200) {
-      throw Exception('Failed to load floors');
+      throw Exception('Failed to load available tables: ${response.body}');
     }
     
-    // Parse floor data
-    final List<dynamic> floorsJson = json.decode(response.body);
-    final floors = floorsJson;
-    
-    // Load tables for each floor
-    for (int i = 0; i < floors.length; i++) {
-      final floorId = floors[i]['id'];
+      // Parse table data
+      final List<dynamic> tablesJson = json.decode(response.body);
+      final List<TableModel> tables = tablesJson
+          .map((json) => TableModel.fromJson(json))
+          .toList();
       
-      // Use the correct endpoint path without reservation_datetime
-      final tablesResponse = await HttpClient.get(
-        'tables_management/tables/floor/$floorId'
-      );
-      
-      if (tablesResponse.statusCode == 200) {
-        final List<dynamic> tablesJson = json.decode(tablesResponse.body);
-        final List<TableModel> tables = tablesJson
-            .map((json) => TableModel.fromJson(json))
-            .toList();
-        
-        floors[i]['tables'] = tables;
-        
-        // Debug info
-        print('Floor ${floors[i]['name']} - Total tables: ${tables.length}');
-        print('Vacant tables: ${tables.where((t) => t.status == TableStatus.VACANT).length}');
-      } else {
-        floors[i]['tables'] = [];
+      // Load floors to organize tables by floor
+      final floorResponse = await HttpClient.get('tables_management/floors');
+      if (floorResponse.statusCode != 200) {
+        throw Exception('Failed to load floors');
       }
+      
+      final List<dynamic> floorsJson = json.decode(floorResponse.body);
+      final floors = floorsJson;
+      
+      // Organize tables by floor
+      final tablesByFloor = <String, List<TableModel>>{};
+      for (final floor in floors) {
+        tablesByFloor[floor['id']] = [];
+      }
+      
+      // Assign tables to floors
+      for (final table in tables) {
+        final floorId = table.floorId;
+        if (tablesByFloor.containsKey(floorId)) {
+          tablesByFloor[floorId]!.add(table);
+        }
+      }
+      
+      // Remove floors with no available tables
+      final floorsWithTables = floors.where((floor) => 
+          tablesByFloor[floor['id']]?.isNotEmpty ?? false).toList();
+      
+      // Add tables to each floor
+      for (int i = 0; i < floorsWithTables.length; i++) {
+        final floorId = floorsWithTables[i]['id'];
+        floorsWithTables[i]['tables'] = tablesByFloor[floorId] ?? [];
+      }
+      
+      setState(() {
+        _availableTables = tables;
+        _tablesByFloor = tablesByFloor;
+        _floorPlans = floorsWithTables;
+        _isLoading = false;
+        
+        // Initialize from selected IDs if any
+        if (widget.initialSelectedTableIds.isNotEmpty) {
+          _initializeSelectedTables();
+        }
+      });
+      
+      _animationController.forward(from: 0.0);
+      
+      // Debug info
+      print('Available tables for reservation: ${tables.length}');
+      print('Tables by floor: $_tablesByFloor');
+      
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load available tables: ${e.toString()}';
+        _isLoading = false;
+      });
     }
-    
-
-    // In _loadFloorPlans() after parsing the tables:
-print('API Tables Response: $floors');
-print('Parsed Tables: $floors');
-
-    
-    setState(() {
-      _floorPlans = floors;
-      _isLoading = false;
-      
-      // Initialize from selected IDs if any
-      if (widget.initialSelectedTableIds.isNotEmpty) {
-        _initializeSelectedTables();
-      }
-    });
-    
-    _animationController.forward(from: 0.0);
-    
-  } catch (e) {
-    setState(() {
-      _errorMessage = 'Failed to load floor plans: ${e.toString()}';
-      _isLoading = false;
-    });
   }
-}
-  
+    
   void _initializeSelectedTables() {
     if (widget.initialSelectedTableIds.isEmpty) return;
     
     final selectedTables = <TableModel>[];
     
-    for (final floor in _floorPlans) {
-      for (final table in floor['tables']) {
-        print("table.id: ${table.id}");
-        if (widget.initialSelectedTableIds.contains(table.id)) {
-          selectedTables.add(table);
-        }
+    for (final table in _availableTables) {
+      if (widget.initialSelectedTableIds.contains(table.id)) {
+        selectedTables.add(table);
       }
     }
     
@@ -141,70 +156,31 @@ print('Parsed Tables: $floors');
     });
   }
   
-void _toggleTableSelection(TableModel table) async {
-  print("table.status: ${table.status}");
-  
-  // If table is already selected, just remove it
-  if (_selectedTables.any((t) => t.id == table.id)) {
-    setState(() {
-      _selectedTables.removeWhere((t) => t.id == table.id);
-    });
-    return;
-  }
-  
-  // For OCCUPIED tables, show confirmation dialog
-  if (table.status == TableStatus.OCCUPIED) {
-    final bool confirmed = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Table ${table.tableNumber} is occupied'),
-        content: Text('This table already has active orders. Do you want to add more items to this table?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('CONFIRM'),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).primaryColor,
-            ),
-          ),
-        ],
-      ),
-    ) ?? false;
+  void _toggleTableSelection(TableModel table) {
+    // If table is already selected, just remove it
+    if (_selectedTables.any((t) => t.id == table.id)) {
+      setState(() {
+        _selectedTables.removeWhere((t) => t.id == table.id);
+      });
+      return;
+    }
     
-    if (!confirmed) return;
-  } 
-  // For tables that are not VACANT or OCCUPIED, don't allow selection
-  else if (table.status != TableStatus.VACANT) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Table ${table.tableNumber} is ${table.status.displayName.toLowerCase()} and cannot be selected'),
-        backgroundColor: Colors.red,
-      ),
-    );
-    return;
+    // Check if table has enough capacity
+    if (table.capacity < widget.partySize) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Table ${table.tableNumber} is too small for your party size of ${widget.partySize}'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    // Add the table to selection
+    setState(() {
+      _selectedTables.add(table);
+    });
   }
-  
-  // Check if table has enough capacity
-  if (table.capacity < widget.partySize) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Table ${table.tableNumber} is too small for your party size of ${widget.partySize}'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-    return;
-  }
-  
-  // Add the table to selection
-  setState(() {
-    print("Adding table: ${table}");
-    _selectedTables.add(table);
-  });
-}
 
   int _getTotalCapacity() {
     return _selectedTables.fold(0, (sum, table) => sum + table.capacity);
@@ -214,9 +190,19 @@ void _toggleTableSelection(TableModel table) async {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Select Tables for ${DateFormat('MMM d, h:mm a').format(widget.selectedDate)}',
-          style: const TextStyle(fontSize: 16),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Available Tables for Reservation',
+              style: const TextStyle(fontSize: 16),
+            ),
+            Text(
+              '${DateFormat('MMM d, h:mm a').format(widget.reservationDateTime)} • ${widget.durationMinutes} mins',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+            ),
+          ],
         ),
         actions: [
           TextButton.icon(
@@ -248,7 +234,7 @@ void _toggleTableSelection(TableModel table) async {
           const CircularProgressIndicator(),
           const SizedBox(height: 24),
           Text(
-            'Loading available tables...',
+            'Finding available tables for your reservation...',
             style: TextStyle(
               color: Colors.grey[600],
               fontSize: 16,
@@ -281,7 +267,7 @@ void _toggleTableSelection(TableModel table) async {
             Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
             const SizedBox(height: 16),
             Text(
-              'Error Loading Tables',
+              'Error Loading Available Tables',
               style: TextStyle(
                 fontSize: 20, 
                 fontWeight: FontWeight.bold,
@@ -309,7 +295,114 @@ void _toggleTableSelection(TableModel table) async {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: _loadFloorPlans,
+              onPressed: _loadAvailableTables,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoAvailableTablesView() {
+    final formatter = DateFormat('MMM d, h:mm a');
+    final endTime = widget.reservationDateTime.add(Duration(minutes: widget.durationMinutes));
+    
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        margin: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.orange[50],
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.orange.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.event_busy, size: 64, color: Colors.orange[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No Tables Available',
+              style: TextStyle(
+                fontSize: 20, 
+                fontWeight: FontWeight.bold,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.schedule, color: Colors.grey[600], size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${formatter.format(widget.reservationDateTime)} - ${formatter.format(endTime)}',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.people, color: Colors.grey[600], size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Party Size: ${widget.partySize}',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'There are no tables available for the selected time and party size. Please try a different time or adjust your party size.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[700]),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Go Back'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[400],
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Try Again'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _loadAvailableTables,
+                ),
+              ],
             ),
           ],
         ),
@@ -318,24 +411,8 @@ void _toggleTableSelection(TableModel table) async {
   }
 
   Widget _buildFloorPlanView() {
-    if (_floorPlans.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.table_bar, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No floor plans available',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      );
+    if (_floorPlans.isEmpty || _availableTables.isEmpty) {
+      return _buildNoAvailableTablesView();
     }
     
     return AnimatedBuilder(
@@ -347,39 +424,40 @@ void _toggleTableSelection(TableModel table) async {
           child: Column(
             children: [
               // Floor selector tabs
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: List.generate(_floorPlans.length, (index) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                          child: ChoiceChip(
-                            label: Text(_floorPlans[index]['name']),
-                            selected: _selectedFloorIndex == index,
-                            onSelected: (selected) {
-                              if (selected) {
-                                setState(() {
-                                  _selectedFloorIndex = index;
-                                });
-                              }
-                            },
-                          ),
-                        );
-                      }),
+              if (_floorPlans.length > 1)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: List.generate(_floorPlans.length, (index) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                            child: ChoiceChip(
+                              label: Text(_floorPlans[index]['name']),
+                              selected: _selectedFloorIndex == index,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _selectedFloorIndex = index;
+                                  });
+                                }
+                              },
+                            ),
+                          );
+                        }),
+                      ),
                     ),
                   ),
                 ),
-              ),
               
-              // Party size info
+              // Reservation info card
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Card(
@@ -389,36 +467,74 @@ void _toggleTableSelection(TableModel table) async {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).primaryColor.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.group,
-                            color: Theme.of(context).primaryColor,
-                          ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.event,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    DateFormat('EEEE, MMMM d, yyyy').format(widget.reservationDateTime),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('h:mm a').format(widget.reservationDateTime) + 
+                                    ' - ' + 
+                                    DateFormat('h:mm a').format(
+                                      widget.reservationDateTime.add(Duration(minutes: widget.durationMinutes))
+                                    ),
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Party Size: ${widget.partySize}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          'Tables: ${_selectedTables.length}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _selectedTables.isEmpty
-                                ? Colors.grey
-                                : Theme.of(context).primaryColor,
-                          ),
+                        const Divider(height: 20),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.group,
+                              size: 20,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Party Size: ${widget.partySize}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'Available Tables: ${_availableTables.length}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -436,7 +552,7 @@ void _toggleTableSelection(TableModel table) async {
                             Icon(Icons.table_restaurant, size: 48, color: Colors.grey[400]),
                             const SizedBox(height: 16),
                             Text(
-                              'No tables on this floor',
+                              'No available tables on this floor',
                               style: TextStyle(color: Colors.grey[600]),
                             ),
                           ],
@@ -470,8 +586,6 @@ void _toggleTableSelection(TableModel table) async {
   }
 
   Widget _buildTableCard(TableModel table, bool isSelected) {
-    final Color statusColor = _getStatusColor(table.status);
-    final bool isAvailable = table.status == TableStatus.VACANT;
     final bool capacityOk = table.capacity >= widget.partySize;
     
     return Card(
@@ -481,13 +595,13 @@ void _toggleTableSelection(TableModel table) async {
         side: BorderSide(
           color: isSelected
               ? Theme.of(context).primaryColor
-              : statusColor,
+              : Colors.green,
           width: isSelected ? 2 : 1,
         ),
       ),
       color: isSelected
           ? Theme.of(context).primaryColor.withOpacity(0.1)
-          : statusColor.withOpacity(0.05),
+          : Colors.green.withOpacity(0.05),
       child: InkWell(
         onTap: () => _toggleTableSelection(table),
         borderRadius: BorderRadius.circular(8),
@@ -505,10 +619,10 @@ void _toggleTableSelection(TableModel table) async {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: (isSelected ? Theme.of(context).primaryColor : statusColor).withOpacity(0.1),
+                      color: (isSelected ? Theme.of(context).primaryColor : Colors.green).withOpacity(0.1),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: isSelected ? Theme.of(context).primaryColor : statusColor,
+                        color: isSelected ? Theme.of(context).primaryColor : Colors.green,
                         width: 2,
                       ),
                     ),
@@ -518,7 +632,7 @@ void _toggleTableSelection(TableModel table) async {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? Theme.of(context).primaryColor : statusColor,
+                      color: isSelected ? Theme.of(context).primaryColor : Colors.green,
                     ),
                   ),
                 ],
@@ -557,26 +671,20 @@ void _toggleTableSelection(TableModel table) async {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    isSelected
-                        ? Icons.check_circle
-                        : isAvailable
-                            ? Icons.check_circle_outline
-                            : Icons.do_not_disturb,
+                    isSelected ? Icons.check_circle : Icons.check_circle_outline,
                     color: isSelected
                         ? Theme.of(context).primaryColor
-                        : statusColor,
+                        : Colors.green,
                     size: 14,
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    isSelected
-                        ? 'Selected'
-                        : isAvailable ? 'Available' : table.status.displayName,
+                    isSelected ? 'Selected' : 'Available',
                     style: TextStyle(
                       fontSize: 10,
                       color: isSelected
                           ? Theme.of(context).primaryColor
-                          : statusColor,
+                          : Colors.green,
                     ),
                   ),
                 ],
@@ -705,34 +813,17 @@ void _toggleTableSelection(TableModel table) async {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-                 child: const Text(
-      'CONFIRM SELECTION',
-      style: TextStyle(
-        fontSize: 16, 
-        fontWeight: FontWeight.bold,
-      ), // Add this style to make text more visible
-    ),
+              child: const Text(
+                'CONFIRM SELECTION',
+                style: TextStyle(
+                  fontSize: 16, 
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
       ),
     );
-  }
-  
-  Color _getStatusColor(TableStatus status) {
-    switch (status) {
-      case TableStatus.VACANT:
-        return Colors.green;
-      case TableStatus.OCCUPIED:
-        return Colors.red;
-      case TableStatus.RESERVED:
-        return Colors.orange;
-      case TableStatus.CLEANING:
-        return Colors.blue;
-      case TableStatus.MAINTENANCE:
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
   }
 }

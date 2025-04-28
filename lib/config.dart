@@ -51,7 +51,7 @@
 
 
 class Config {
-  static const String baseUrl = 'https://wookraft-backend-1.onrender.com';
-  static const String wsUrl = 'wss://wookraft-backend-1.onrender.com/ws';
+  static const String baseUrl = 'https://wookraft-backend-1-t73i.onrender.com';
+  static const String wsUrl = 'wss://wookraft-backend-1-t73i.onrender.com/ws';
  
 }

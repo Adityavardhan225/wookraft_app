@@ -881,6 +881,14 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
   }
 
   Future<void> _initializeWebSocket() async {
+
+      setState(() {
+    activeOrders.clear();
+    filteredOrders.clear();
+    isLoading = true;
+    errorMessage = null;
+  });
+  
     final employeeId = await HttpClient.getEmployeeId();
     final token = await HttpClient.getToken();
     if (token != null) {
@@ -1029,58 +1037,78 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
     );
   }
 
-  Future<void> _showUpdateOrderDialog(String orderId, Map<String, dynamic> item) async {
-    final quantityController = TextEditingController(text: item['quantity'].toString());
-    final customizationController = TextEditingController(text: item['customization'] ?? '');
-
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: quantityController,
-              decoration: InputDecoration(
-                labelText: 'Quantity',
-              ),
-              keyboardType: TextInputType.number,
+Future<void> _showUpdateOrderDialog(String orderId, Map<String, dynamic> item) async {
+  final quantityController = TextEditingController(text: item['quantity'].toString());
+  
+  // Extract only the customization text
+  String customizationText = '';
+  if (item['customization'] != null) {
+    if (item['customization'] is String) {
+      customizationText = item['customization'];
+    } else if (item['customization'] is Map) {
+      // Extract only the 'text' field from the customization Map
+      final customization = item['customization'] as Map;
+      if (customization.containsKey('text')) {
+        customizationText = customization['text']?.toString() ?? '';
+      }
+    }
+  }
+  
+  final customizationController = TextEditingController(text: customizationText);
+  
+  // Only show the customization field if we have text or for new input
+  final bool showCustomizationField = true; // Always allow customization input
+  
+  return showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Update Item'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: quantityController,
+            decoration: InputDecoration(
+              labelText: 'Quantity',
             ),
+            keyboardType: TextInputType.number,
+          ),
+          if (showCustomizationField)
             TextField(
               controller: customizationController,
               decoration: InputDecoration(
-                labelText: 'Customization',
+                labelText: 'Special Instructions',
+                hintText: 'Enter any special instructions',
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final updates = {
-                'items': [
-                  {
-                    'name': item['name'],
-                    'quantity': int.parse(quantityController.text),
-                    'customization': customizationController.text,
-                  }
-                ]
-              };
-              webSocketService.updateOrder(orderId, updates);
-              Navigator.pop(context);
-            },
-            child: Text('Update'),
-          ),
         ],
       ),
-    );
-  }
-
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            // For the update, wrap the text in a proper customization object
+            final updates = {
+              'items': [
+                {
+                  'name': item['name'],
+                  'quantity': int.parse(quantityController.text),
+                  'customization': {'text': customizationController.text}
+                }
+              ]
+            };
+            webSocketService.updateOrder(orderId, updates);
+            Navigator.pop(context);
+          },
+          child: Text('Update'),
+        ),
+      ],
+    ),
+  );
+}
   // Improved parsing to extract just values
   Map<String, String> parseCustomization(String customizationStr) {
     Map<String, String> result = {};
@@ -1790,7 +1818,7 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
     List<Widget> customizationChips = [];
     
     // Size chip (if present)
-    if (components.containsKey('size')) {
+    if (components.containsKey('size') && components['size']!.isNotEmpty) {
       customizationChips.add(_buildChip(
         components['size']!,
         Icons.straighten,
@@ -1798,8 +1826,9 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
       ));
     }
     
-    // Add-ons chip (if present)
-    if (components.containsKey('addons')) {
+    // Add-ons chip (if present and not empty)
+    if (components.containsKey('addons') && components['addons']!.isNotEmpty && 
+        components['addons'] != '[]' && components['addons'] != 'null') {
       customizationChips.add(_buildChip(
         components['addons']!,
         Icons.add_circle_outline,
@@ -1807,8 +1836,8 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
       ));
     }
     
-    // Special instructions (if present)
-    if (components.containsKey('text')) {
+    // Special instructions (if present and not empty)
+    if (components.containsKey('text') && components['text']!.isNotEmpty) {
       customizationChips.add(_buildChip(
         components['text']!,
         Icons.message_outlined,

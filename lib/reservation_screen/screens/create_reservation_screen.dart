@@ -6,6 +6,7 @@ import '../services/reservation_service.dart';
 import '../services/websocket_service.dart';
 import '../../table_screen/screens/table_selection_screen.dart'; // You may need to adjust this path
 import '../../table_screen/models/table_model.dart'; // Import the TableModel class
+import '../models/table_selection_reservation_screen.dart'; // Import the new screen
 
 class CreateReservationScreen extends StatefulWidget {
   const CreateReservationScreen({super.key});
@@ -73,7 +74,52 @@ String _tableDisplayText = '';
   }
 
 
-  // Add this method to the _CreateReservationScreenState class
+//   // Add this method to the _CreateReservationScreenState class
+// Future<void> _selectTables(BuildContext context) async {
+//   // Get the reservation date and time for availability checking
+//   final DateTime reservationDateTime = _getReservationDateTime();
+  
+//   // Get party size for appropriate table selection
+//   final int partySize = int.tryParse(_partySizeController.text) ?? 2;
+  
+//   final result = await Navigator.push(
+//     context,
+//     MaterialPageRoute(
+//       builder: (context) => TableSelectionScreen(
+//         selectedDate: reservationDateTime,
+//         partySize: partySize,
+//         initialSelectedTableIds: _selectedTableIds,
+//         selectionMode: true, // This tells the screen to only allow selection
+//       ),
+//     ),
+//   );
+  
+//   if (result != null && result is List<TableModel>) {
+//     setState(() {
+//       _selectedTables = result;
+//       _selectedTableIds = _selectedTables.map((table) => table.id).toList();
+//       print("Selected table IDs after selection: $_selectedTableIds");
+//       print("Selected tables after selection: $_selectedTables");
+      
+//       // Update display text
+//       if (_selectedTables.isEmpty) {
+//         _tableDisplayText = '';
+//       } else {
+//         final tableNumbers = _selectedTables
+//             .map((table) => 'Table ${table.tableNumber}')
+//             .join(', ');
+//         _tableDisplayText = tableNumbers;
+        
+//         // Also update the text field value for backward compatibility
+//         _tablePreferenceController.text = _tableDisplayText;
+//       }
+//     });
+//   }
+// }
+
+
+
+// Update the _selectTables method to use the new reservation-specific screen
 Future<void> _selectTables(BuildContext context) async {
   // Get the reservation date and time for availability checking
   final DateTime reservationDateTime = _getReservationDateTime();
@@ -81,36 +127,58 @@ Future<void> _selectTables(BuildContext context) async {
   // Get party size for appropriate table selection
   final int partySize = int.tryParse(_partySizeController.text) ?? 2;
   
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => TableSelectionScreen(
-        selectedDate: reservationDateTime,
-        partySize: partySize,
-        initialSelectedTableIds: _selectedTableIds,
-        selectionMode: true, // This tells the screen to only allow selection
-      ),
-    ),
-  );
+  // Get duration for availability checking
+  final int durationMinutes = int.tryParse(_durationController.text) ?? 90;
   
-  if (result != null && result is List<TableModel>) {
+  // Show loading indicator while navigating
+  setState(() {
+    _isLoading = true;
+  });
+  
+  try {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TableSelectionReservationScreen(
+          reservationDateTime: reservationDateTime,
+          partySize: partySize,
+          durationMinutes: durationMinutes,
+          initialSelectedTableIds: _selectedTableIds,
+        ),
+      ),
+    );
+    
     setState(() {
-      _selectedTables = result;
-      _selectedTableIds = _selectedTables.map((table) => table.id).toList();
-      
-      // Update display text
-      if (_selectedTables.isEmpty) {
-        _tableDisplayText = '';
-      } else {
-        final tableNumbers = _selectedTables
-            .map((table) => 'Table ${table.tableNumber}')
-            .join(', ');
-        _tableDisplayText = tableNumbers;
-        
-        // Also update the text field value for backward compatibility
-        _tablePreferenceController.text = _tableDisplayText;
-      }
+      _isLoading = false;
     });
+    
+    if (result != null && result is List<TableModel>) {
+      setState(() {
+        _selectedTables = result;
+        _selectedTableIds = _selectedTables.map((table) => table.id).toList();
+        
+        // Update display text
+        if (_selectedTables.isEmpty) {
+          _tableDisplayText = '';
+        } else {
+          // Show table numbers and capacities
+          final tableNumbers = _selectedTables
+              .map((table) => 'Table ${table.tableNumber} (${table.capacity}p)')
+              .join(', ');
+          _tableDisplayText = tableNumbers;
+          
+          // Also update the text field value for backward compatibility
+          _tablePreferenceController.text = _tableDisplayText;
+        }
+      });
+    }
+  } finally {
+    // Ensure loading is turned off if there was an error
+    if (_isLoading) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 }
 
@@ -234,6 +302,12 @@ Future<void> _selectTables(BuildContext context) async {
       // Parse values to appropriate types
       final int partySize = int.parse(_partySizeController.text);
       final int durationMinutes = int.parse(_durationController.text);
+
+          final DateTime localDateTime = _getReservationDateTime();
+    final DateTime utcDateTime = localDateTime.toUtc();
+    
+    print("Local DateTime: $localDateTime");
+    print("UTC DateTime: $utcDateTime");
       
       // Create reservation data object
       final reservationData = ReservationCreate(
@@ -241,13 +315,15 @@ Future<void> _selectTables(BuildContext context) async {
         customerPhone: _phoneController.text,
         customerEmail: _emailController.text.isNotEmpty ? _emailController.text : null,
         partySize: partySize,
-        reservationDate: _getReservationDateTime(),
+        reservationDate: utcDateTime,
         expectedDurationMinutes: durationMinutes,
         specialRequests: _specialRequestsController.text.isNotEmpty 
             ? _specialRequestsController.text : null,
         tablePreference: _tablePreferenceController.text.isNotEmpty
             ? _tablePreferenceController.text : null,
+        table_ids: _selectedTableIds.isNotEmpty ? _selectedTableIds : null,
       );
+      print(reservationData.table_ids);
       
       // Submit to API
       final createdReservation = await _reservationService.createReservation(reservationData);

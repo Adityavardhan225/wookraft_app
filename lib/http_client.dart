@@ -103,4 +103,29 @@ class HttpClient {
     }
     return headers;
   }
+
+
+  // Add this new method to your HttpClient class:
+static Future<http.Response> getWithQueryParams(String path, Map<String, String> queryParams) async {
+  // Create a Uri properly with separate query parameters
+  final uri = Uri.parse('$_baseUrl/$path');
+  
+  // Create a new Uri with the same path but with query parameters
+  final requestUri = uri.replace(queryParameters: queryParams);
+  
+  print('Making API request to: ${requestUri.toString()}');
+  
+  try {
+    final response = await http.get(
+      requestUri,
+      headers: await _createHeaders(await getToken()),
+    );
+    return response;
+  } catch (e) {
+    print('HTTP Client Error: $e');
+    throw Exception('Failed to make GET request: $e');
+  }
+}
+
+
 }

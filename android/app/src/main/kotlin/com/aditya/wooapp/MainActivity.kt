@@ -1,4 +1,4 @@
-package com.example.woopos_app
+package com.aditya.wooapp
 
 import io.flutter.embedding.android.FlutterActivity
 

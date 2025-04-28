@@ -172,6 +172,7 @@ class ReservationCreate {
   final int expectedDurationMinutes;
   final String? specialRequests;
   final String? tablePreference;
+    final List<String>? table_ids;
 
   ReservationCreate({
     required this.customerName,
@@ -182,6 +183,7 @@ class ReservationCreate {
     this.expectedDurationMinutes = 90,
     this.specialRequests,
     this.tablePreference,
+    this.table_ids,
   });
 
   Map<String, dynamic> toJson() {
@@ -194,6 +196,8 @@ class ReservationCreate {
       'expected_duration_minutes': expectedDurationMinutes,
       'special_requests': specialRequests,
       'table_preference': tablePreference,
+      'table_ids': table_ids,
+      
     };
   }
 }
